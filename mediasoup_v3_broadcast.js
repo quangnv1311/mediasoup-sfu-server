@@ -385,6 +385,8 @@ const mediasoupOptions = {
     enableUdp: true,
     enableTcp: true,
     preferUdp: true,
+    preferTcp: true,
+    enableSctp: true,
     maxIncomingBitrate: 1500000,
     initialAvailableOutgoingBitrate: 1000000,
   }
@@ -536,4 +538,3 @@ async function createConsumer(transport, producer, rtpCapabilities) {
     }
   };
 }
-
