@@ -4,10 +4,13 @@
 const fs = require('fs');
 let serverOptions = {
   hostName: "localhost",
-  listenPort: 3000,
+  listenPort: process.env.PORT || 3000,
   useHttps: false
 };
-let sslOptions = {};
+let sslOptions = {
+  key:'',
+  cert: ''
+};
 if (serverOptions.useHttps) {
   sslOptions.key = fs.readFileSync(serverOptions.httpsKeyFile).toString();
   sslOptions.cert = fs.readFileSync(serverOptions.httpsCertFile).toString();
@@ -533,3 +536,4 @@ async function createConsumer(transport, producer, rtpCapabilities) {
     }
   };
 }
+
