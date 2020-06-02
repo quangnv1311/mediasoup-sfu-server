@@ -340,7 +340,7 @@ const mediasoupOptions = {
   // Worker settings
   worker: {
     rtcMinPort: 10000,
-    rtcMaxPort: 20000,
+    rtcMaxPort: 59999,
     logLevel: 'warn',
     logTags: [
       'info',
@@ -386,7 +386,6 @@ const mediasoupOptions = {
     enableTcp: true,
     preferUdp: true,
     preferTcp: true,
-    enableSctp: true,
     maxIncomingBitrate: 1500000,
     initialAvailableOutgoingBitrate: 1000000,
   }
