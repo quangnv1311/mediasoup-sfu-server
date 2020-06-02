@@ -5,12 +5,16 @@ const fs = require('fs');
 let serverOptions = {
   hostName: "localhost",
   listenPort: process.env.PORT || 3000,
-  useHttps: false
+  useHttps: true,
+  httpsKeyFile:  'keys/server.key',
+  httpsCertFile: 'keys/server.crt'
 };
+
 let sslOptions = {
-  key:'',
+  key: '',
   cert: ''
 };
+
 if (serverOptions.useHttps) {
   sslOptions.key = fs.readFileSync(serverOptions.httpsKeyFile).toString();
   sslOptions.cert = fs.readFileSync(serverOptions.httpsCertFile).toString();
