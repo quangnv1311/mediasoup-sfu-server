@@ -1,14 +1,21 @@
 'use strict';
-
-// --- read options ---
+require("dotenv").config();
 const fs = require('fs');
+
+const config = {
+  ipMediaSoup: process.env.IP_MEDIA_SOUP || 'localhost',
+  ipPublicMediaSoup: process.env.PUBLIC_IP_MEDIA_SOUP || 'localhost'
+};
+
 let serverOptions = {
   hostName: "localhost",
   listenPort: process.env.PORT || 3000,
   useHttps: true,
-  httpsKeyFile:  'keys/server.key',
-  httpsCertFile: 'keys/server.crt'
+  httpsKeyFile:  process.env.SSL_KEY_FILE || 'keys/server.key',
+  httpsCertFile: process.env.SSL_CERT_FILE || 'keys/server.crt'
 };
+
+console.log(serverOptions, config);
 
 let sslOptions = {
   key: '',
@@ -20,7 +27,6 @@ if (serverOptions.useHttps) {
   sslOptions.cert = fs.readFileSync(serverOptions.httpsCertFile).toString();
 }
 
-// --- prepare server ---
 const http = require("http");
 const https = require("https");
 const express = require('express');
@@ -31,28 +37,26 @@ app.use(express.static('public'));
 
 let webServer = null;
 if (serverOptions.useHttps) {
-  // -- https ---
+
   webServer = https.createServer(sslOptions, app).listen(webPort, function () {
     console.log('Web server start. https://' + serverOptions.hostName + ':' + webServer.address().port + '/');
   });
 }
 else {
-  // --- http ---
+
   webServer = http.Server(app).listen(webPort, function () {
     console.log('Web server start. http://' + serverOptions.hostName + ':' + webServer.address().port + '/');
   });
 }
 
-// --- file check ---
+
 function isFileExist(path) {
   try {
     fs.accessSync(path, fs.constants.R_OK);
-    //console.log('File Exist path=' + path);
     return true;
   }
   catch (err) {
     if (err.code === 'ENOENT') {
-      //console.log('File NOT Exist path=' + path);
       return false
     }
   }
@@ -135,11 +139,9 @@ io.on('connection', function (socket) {
     }
     else {
       console.error('produce ERROR. BAD kind:', kind);
-      //sendResponse({}, callback);
       return;
     }
 
-    // inform clients about new producer
     console.log('--broadcast newProducer -- kind=', kind);
     socket.broadcast.emit('newProducer', { kind: kind });
   });
@@ -164,7 +166,6 @@ io.on('connection', function (socket) {
       }
       removeConsumerTransport(id);
     });
-    //console.log('-- createTransport params:', params);
     sendResponse(params, callback);
   });
 
@@ -191,8 +192,7 @@ io.on('connection', function (socket) {
           console.error('transport NOT EXIST for id=' + getId(socket));
           return;
         }
-        const { consumer, params } = await createConsumer(transport, videoProducer, data.rtpCapabilities); // producer must exist before consume
-        //subscribeConsumer = consumer;
+        const { consumer, params } = await createConsumer(transport, videoProducer, data.rtpCapabilities);
         const id = getId(socket);
         addVideoConsumer(id, consumer);
         consumer.observer.on('close', () => {
@@ -223,8 +223,7 @@ io.on('connection', function (socket) {
           console.error('transport NOT EXIST for id=' + getId(socket));
           return;
         }
-        const { consumer, params } = await createConsumer(transport, audioProducer, data.rtpCapabilities); // producer must exist before consume
-        //subscribeConsumer = consumer;
+        const { consumer, params } = await createConsumer(transport, audioProducer, data.rtpCapabilities);
         const id = getId(socket);
         addAudioConsumer(id, consumer);
         consumer.observer.on('close', () => {
@@ -277,7 +276,6 @@ io.on('connection', function (socket) {
 
   // --- send response to client ---
   function sendResponse(response, callback) {
-    //console.log('sendResponse() callback:', callback);
     callback(null, response);
   }
 
@@ -296,7 +294,6 @@ function getId(socket) {
 }
 
 function getClientCount() {
-  // WARN: undocumented method to get clients number
   return io.eio.clientsCount;
 }
 
@@ -331,10 +328,6 @@ function cleanUpPeer(socket) {
     }
 
     producerSocketId = null;
-
-    // --- clenaup all consumers ---
-    //console.log('---- cleanup clenaup all consumers ---');
-    //removeAllConsumers();
   }
 }
 
@@ -384,7 +377,7 @@ const mediasoupOptions = {
   // WebRtcTransport settings
   webRtcTransport: {
     listenIps: [
-      { ip: '172.17.0.1', announcedIp: '103.127.206.90' }
+      { ip: config.ipMediaSoup, announcedIp: config.ipPublicMediaSoup }
     ],
     enableUdp: true,
     enableTcp: true,
@@ -409,22 +402,11 @@ async function startWorker() {
   const mediaCodecs = mediasoupOptions.router.mediaCodecs;
   worker = await mediasoup.createWorker();
   router = await worker.createRouter({ mediaCodecs });
-  //producerTransport = await router.createWebRtcTransport(mediasoupOptions.webRtcTransport);
   console.log('-- mediasoup worker start. --')
 }
 
 startWorker();
 
-//
-// Room {
-//   id,
-//   transports[],
-//   consumers[],
-//   producers[],
-// }
-//
-
-// --- multi-consumers --
 let transports = {};
 let videoConsumers = {};
 let audioConsumers = {};
@@ -515,7 +497,6 @@ async function createConsumer(transport, producer, rtpCapabilities) {
     return;
   }
 
-  //consumer = await producerTransport.consume({ // NG: try use same trasport as producer (for loopback)
   consumer = await transport.consume({ // OK
     producerId: producer.id,
     rtpCapabilities,
@@ -524,10 +505,6 @@ async function createConsumer(transport, producer, rtpCapabilities) {
     console.error('consume failed', err);
     return;
   });
-
-  //if (consumer.type === 'simulcast') {
-  //  await consumer.setPreferredLayers({ spatialLayer: 2, temporalLayer: 2 });
-  //}
 
   return {
     consumer: consumer,

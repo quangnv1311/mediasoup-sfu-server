@@ -4,20 +4,19 @@
 <head>
   <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
   <meta charset="charset=UTF-8" />
-  <title>mediasoup v3 subscribe</title>
-
+  <title>Livestream using mediasoup by QuangNV</title>
+  <link rel="stylesheet" href="css/style.css">
   <script src="js/mediasoup-client.js"></script>
   <script src="socket.io/socket.io.js"></script>
 </head>
 
 <body>
-  mediasoup v3 subscribe with socket.io<br />
-  <button id="subscribe_button" onclick="subscribe();">Subscribe</button>
-  <button id="disconnect_button" onclick="disconnect();">Disconnect</button>
+  <button id="subscribe_button" onclick="subscribe();">Phát livestream</button>
+  <button id="disconnect_button" onclick="disconnect();">Ngắt kết nối</button>
   <div>
     <span id="state_span"></span>
   </div>
-  remote video<br />
+  Livestream<br />
   <div id="remote_container"></div>
 </body>
 <script>
@@ -29,11 +28,6 @@
   let consumerTransport = null;
   let videoConsumer = null;
   let audioConsumer = null;
-
-  // ---- TODO ----
-  //  DONE - (check can consumer for subcribe) --> subscribe before publish
-  //  DONE - audio track
-  //  - multiple rooms
 
 
   // =========== socket.io ========== 

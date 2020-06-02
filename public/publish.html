@@ -4,21 +4,20 @@
 <head>
   <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
   <meta charset="charset=UTF-8" />
-  <title>mediasoup v3 publish</title>
-
+  <link rel="stylesheet" href="css/style.css">
+  <title>Livestream using mediasoup by QuangNV</title>
   <script src="js/mediasoup-client.js"></script>
   <script src="socket.io/socket.io.js"></script>
 </head>
 
 <body>
-  mediasoup v3 publish with socket.io<br />
-  <input type="checkbox" id="use_video" checked="1">video</input>
-  <input type="checkbox" id="use_audio" checked="1">audio</input>
-  <button id="start_video_button" onclick="startMedia();">Start Media</button>
+  <input type="checkbox" id="use_video" checked="1">Video</input>
+  <input type="checkbox" id="use_audio" checked="1">Audio</input>
+  <button id="start_video_button" onclick="startMedia();">Get Media</button>
   <button id="stop_video_button" onclick="stopMedia();">Stop Media</button>
   &nbsp;
-  <button id="publish_button" onclick="publish();">publish</button>
-  <button id="disconnect_button" onclick="disconnect();">Disconnect</button>
+  <button id="publish_button" onclick="publish();">Phát</button>
+  <button id="disconnect_button" onclick="disconnect();">Ngắt kết nối</button>
   <div>
     local video<br />
     <video id="local_video" autoplay style="width: 240px; height: 180px; border: 1px solid black;"></video>
