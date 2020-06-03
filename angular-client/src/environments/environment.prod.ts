@@ -1,4 +1,4 @@
 export const environment = {
   production: true,
-  ws: 'https://127.0.0.1:3000/'
+  ws: 'https://103.127.206.90:3000/'
 };
