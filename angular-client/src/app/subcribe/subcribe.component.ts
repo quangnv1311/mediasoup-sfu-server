@@ -15,6 +15,7 @@ export class SubcribeComponent implements OnInit, AfterViewInit, OnDestroy {
   videoConsumer = null;
   audioConsumer = null;
   remoteContainer: any;
+  isSubcribed = false;
   constructor(private socket: Socket) { }
 
   ngAfterViewInit(): void {
@@ -106,6 +107,7 @@ export class SubcribeComponent implements OnInit, AfterViewInit, OnDestroy {
       this.socket.disconnect();
       this.clientId = null;
       console.log('socket.io closed..');
+      this.isSubcribed = false;
     }
   }
 
@@ -179,8 +181,7 @@ export class SubcribeComponent implements OnInit, AfterViewInit, OnDestroy {
     let element = document.createElement('video');
     this.remoteContainer.appendChild(element);
     element.id = 'remote_' + id;
-    element.width = 240;
-    element.height = 180;
+    element.width = 640;
     element.volume = 0;
     return element;
   }
@@ -252,6 +253,7 @@ export class SubcribeComponent implements OnInit, AfterViewInit, OnDestroy {
 
         case 'connected':
           console.log('subscribed');
+          this.isSubcribed = true;
           break;
 
         case 'failed':

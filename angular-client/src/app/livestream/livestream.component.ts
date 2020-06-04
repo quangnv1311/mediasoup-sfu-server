@@ -17,6 +17,10 @@ export class LivestreamComponent implements OnInit, AfterViewInit, OnDestroy {
   audioProducer = null;
   localVideo: any;
   localStream: MediaStream;
+
+  isPublished = false;
+  isStartedMedia = false;
+
   constructor(private socket: Socket) {
     
   }
@@ -77,6 +81,7 @@ export class LivestreamComponent implements OnInit, AfterViewInit, OnDestroy {
       this.socket.disconnect();
       this.clientId = null;
       console.log('socket.io closed..');
+      this.isPublished = false;
     }
   }
 
@@ -111,6 +116,7 @@ export class LivestreamComponent implements OnInit, AfterViewInit, OnDestroy {
     }
 
     tracks.forEach(track => track.stop());
+    this.isStartedMedia = false;
   }
 
   playVideo(element, stream) {
@@ -120,6 +126,7 @@ export class LivestreamComponent implements OnInit, AfterViewInit, OnDestroy {
     }
     element.srcObject = stream;
     element.volume = 0;
+    this.isStartedMedia = true;
     return element.play();
   }
 
@@ -151,7 +158,6 @@ export class LivestreamComponent implements OnInit, AfterViewInit, OnDestroy {
       .then((stream) => {
         this.localStream = stream;
         this.playVideo(this.localVideo, this.localStream);
-        console.log(this.localVideo);
       })
       .catch(err => {
         console.error('media ERROR:', err);
@@ -222,6 +228,7 @@ export class LivestreamComponent implements OnInit, AfterViewInit, OnDestroy {
 
         case 'connected':
           console.log('published');
+          this.isPublished = true;
           break;
 
         case 'failed':

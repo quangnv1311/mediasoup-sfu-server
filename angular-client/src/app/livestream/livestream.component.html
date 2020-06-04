@@ -1,9 +1,9 @@
-<button id="start_video_button" (click)="startMedia();">Get Media</button>
-<button id="stop_video_button" (click)="stopMedia();">Stop Media</button>
+<button [disabled]="isStartedMedia" id="start_video_button" (click)="startMedia()">Get Media</button>
+<button [disabled]="!isStartedMedia || isPublished" id="stop_video_button" (click)="stopMedia()">Stop Media</button>
 &nbsp;
-<button id="publish_button" (click)="publish();">Phát</button>
-<button id="disconnect_button" (click)="disconnect();">Ngắt kết nối</button>
+<button [disabled]="!isStartedMedia || isPublished" id="publish_button" (click)="publish()">Phát</button>
+<button [disabled]="!isStartedMedia || !isPublished" id="disconnect_button" (click)="disconnect()">Ngắt kết nối</button>
 <div>
   Local video<br />
-  <video id="local_video" autoplay style="width: 240px; height: 180px; border: 1px solid black;"></video>
+  <video id="local_video" autoplay style="width: 640px; border: 1px solid black;"></video>
 </div>
