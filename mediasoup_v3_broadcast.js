@@ -8,11 +8,13 @@ const config = {
 };
 
 let serverOptions = {
-  hostName: "localhost",
+  hostName: process.env.HOST || '127.0.0.1',
   listenPort: process.env.PORT || 3000,
   useHttps: true,
   httpsKeyFile:  process.env.SSL_KEY_FILE || 'keys/server.key',
-  httpsCertFile: process.env.SSL_CERT_FILE || 'keys/server.crt'
+  httpsCertFile: process.env.SSL_CERT_FILE || 'keys/server.crt',
+  rtcMinPort: process.env.RTC_MIN_PORT || 10000,
+  rtcMaxPort: process.env.RTC_MAX_PORT || 20000
 };
 
 console.log(serverOptions, config);
@@ -39,13 +41,14 @@ let webServer = null;
 if (serverOptions.useHttps) {
 
   webServer = https.createServer(sslOptions, app).listen(webPort, function () {
-    console.log('Web server start. https://' + serverOptions.hostName + ':' + webServer.address().port + '/');
+    console.log('Media server start on https://' + serverOptions.hostName + ':' + webServer.address().port + '/');
+    console.log(`RTC port range: ${serverOptions.rtcMinPort} - ${serverOptions.rtcMaxPort}`)
   });
 }
 else {
 
   webServer = http.Server(app).listen(webPort, function () {
-    console.log('Web server start. http://' + serverOptions.hostName + ':' + webServer.address().port + '/');
+    console.log('Media server start on http://' + serverOptions.hostName + ':' + webServer.address().port + '/');
   });
 }
 
@@ -336,8 +339,8 @@ const mediasoup = require("mediasoup");
 const mediasoupOptions = {
   // Worker settings
   worker: {
-    rtcMinPort: 10000,
-    rtcMaxPort: 59999,
+    rtcMinPort: serverOptions.rtcMinPort,
+    rtcMaxPort: serverOptions.rtcMaxPort,
     logLevel: 'warn',
     logTags: [
       'info',
