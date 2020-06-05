@@ -12,7 +12,7 @@ export class SubcribeComponent implements OnInit, AfterViewInit, OnDestroy {
   clientId = null;
   device = null;
   consumerTransport = null;
-  videoConsumer = null;
+  // videoConsumer = null;
   audioConsumer = null;
   remoteContainer: any;
   isSubcribed = false;
@@ -68,7 +68,7 @@ export class SubcribeComponent implements OnInit, AfterViewInit, OnDestroy {
         if (this$.consumerTransport) {
           // start consume
           if (message.kind === 'video') {
-            this$.videoConsumer = await this$.consumeAndResume(this$.consumerTransport, message.kind);
+            // this$.videoConsumer = await this$.consumeAndResume(this$.consumerTransport, message.kind);
           } else if (message.kind === 'audio') {
             this$.audioConsumer = await this$.consumeAndResume(this$.consumerTransport, message.kind);
           }
@@ -82,10 +82,10 @@ export class SubcribeComponent implements OnInit, AfterViewInit, OnDestroy {
         const kind = message.kind;
         console.log('--try removeConsumer remoteId=' + remoteId + ', localId=' + localId + ', kind=' + kind);
         if (kind === 'video') {
-          if (this$.videoConsumer) {
-            this$.videoConsumer.close();
-            this$.videoConsumer = null;
-          }
+          // if (this$.videoConsumer) {
+            // this$.videoConsumer.close();
+            // this$.videoConsumer = null;
+          // }
         } else if (kind === 'audio') {
           if (this$.audioConsumer) {
             this$.audioConsumer.close();
@@ -94,9 +94,9 @@ export class SubcribeComponent implements OnInit, AfterViewInit, OnDestroy {
         }
 
         if (remoteId) {
-          this$.removeRemoteVideo(remoteId);
+          this$.removeRemoteAudio(remoteId);
         } else {
-          this$.removeAllRemoteVideo();
+          this$.removeAllRemoteAudio();
         }
       })
     });
@@ -134,65 +134,66 @@ export class SubcribeComponent implements OnInit, AfterViewInit, OnDestroy {
     });
   }
 
-  playVideo(element, stream) {
+  playAudio(element, stream) {
     if (element.srcObject) {
       console.warn('element ALREADY playing, so ignore');
       return;
     }
     element.srcObject = stream;
+    element.controls = true;
     element.volume = 0;
     return element.play();
   }
 
-  pauseVideo(element) {
+  pauseAudio(element) {
     element.pause();
     element.srcObject = null;
   }
 
   addRemoteTrack(id, track) {
-    let video = this.findRemoteVideo(id) as any;
-    if (!video) {
-      video = this.addRemoteVideo(id);
+    let audio = this.findRemoteAudio(id) as any;
+    if (!audio) {
+      audio = this.addRemoteAudio(id);
     }
 
-    if (video.srcObject) {
-      video.srcObject.addTrack(track);
+    if (audio.srcObject) {
+      audio.srcObject.addTrack(track);
       return;
     }
 
     const newStream = new MediaStream();
     newStream.addTrack(track);
-    this.playVideo(video, newStream)
+    this.playAudio(audio, newStream)
       .then(() => {
-        video.volume = 1.0
+        audio.volume = 1.0
       })
       .catch(err => {
         console.error('media ERROR:', err)
       });
   }
 
-  addRemoteVideo(id) {
-    let existElement = this.findRemoteVideo(id);
+  addRemoteAudio(id) {
+    let existElement = this.findRemoteAudio(id);
     if (existElement) {
-      console.warn('remoteVideo element ALREADY exist for id=' + id);
+      console.warn('remoteAudio element ALREADY exist for id=' + id);
       return existElement;
     }
 
-    let element = document.createElement('video');
+    let element = document.createElement('audio');
     this.remoteContainer.appendChild(element);
     element.id = 'remote_' + id;
-    element.width = 640;
+    element.controls = true;
     element.volume = 0;
     return element;
   }
 
-  findRemoteVideo(id) {
+  findRemoteAudio(id) {
     let element = document.getElementById('remote_' + id);
     return element;
   }
 
-  removeRemoteVideo(id) {
-    console.log(' ---- removeRemoteVideo() id=' + id);
+  removeRemoteAudio(id) {
+    console.log(' ---- removeRemoteAudio() id=' + id);
     let element = document.getElementById('remote_' + id) as any;
     if (element) {
       element.pause();
@@ -203,7 +204,7 @@ export class SubcribeComponent implements OnInit, AfterViewInit, OnDestroy {
     }
   }
 
-  removeAllRemoteVideo() {
+  removeAllRemoteAudio() {
     while (this.remoteContainer.firstChild) {
       this.remoteContainer.firstChild.pause();
       this.remoteContainer.firstChild.srcObject = null;
@@ -265,7 +266,7 @@ export class SubcribeComponent implements OnInit, AfterViewInit, OnDestroy {
       }
     });
 
-    this.videoConsumer = await this.consumeAndResume(this.consumerTransport, 'video');
+    // this.videoConsumer = await this.consumeAndResume(this.consumerTransport, 'video');
     this.audioConsumer = await this.consumeAndResume(this.consumerTransport, 'audio');
   }
 
@@ -296,10 +297,10 @@ export class SubcribeComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   disconnect() {
-    if (this.videoConsumer) {
-      this.videoConsumer.close();
-      this.videoConsumer = null;
-    }
+    // if (this.videoConsumer) {
+    //   this.videoConsumer.close();
+    //   this.videoConsumer = null;
+    // }
     if (this.audioConsumer) {
       this.audioConsumer.close();
       this.audioConsumer = null;
@@ -309,7 +310,7 @@ export class SubcribeComponent implements OnInit, AfterViewInit, OnDestroy {
       this.consumerTransport = null;
     }
 
-    this.removeAllRemoteVideo();
+    this.removeAllRemoteAudio();
 
     this.disconnectSocket();
   }

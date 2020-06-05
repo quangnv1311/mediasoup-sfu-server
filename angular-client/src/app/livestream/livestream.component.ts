@@ -1,7 +1,7 @@
 import { Component, OnInit, AfterViewInit, OnDestroy } from '@angular/core';
 import { Socket } from 'ngx-socket-io';
 import * as mediasoupClient from "mediasoup-client";
-
+const mediaStreamRecorder = require('msr');
 let this$;
 
 @Component({
@@ -13,16 +13,17 @@ export class LivestreamComponent implements OnInit, AfterViewInit, OnDestroy {
   clientId = null;
   device = null;
   producerTransport = null;
-  videoProducer = null;
+  // videoProducer = null;
   audioProducer = null;
-  localVideo: any;
+  localAudio: any;
   localStream: MediaStream;
 
   isPublished = false;
   isStartedMedia = false;
 
+  recorder: any;
   constructor(private socket: Socket) {
-    
+
   }
   ngOnDestroy(): void {
     this.socket.disconnect();
@@ -32,7 +33,7 @@ export class LivestreamComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   ngAfterViewInit(): void {
-    this.localVideo = document.getElementById('local_video');
+    this.localAudio = document.getElementById('local_audio');
   }
 
   connectSocket() {
@@ -114,36 +115,27 @@ export class LivestreamComponent implements OnInit, AfterViewInit, OnDestroy {
       console.warn('NO tracks');
       return;
     }
-
+    // this.download();
     tracks.forEach(track => track.stop());
     this.isStartedMedia = false;
   }
 
-  playVideo(element, stream) {
+  playAudio(element, stream) {
     if (element.srcObject) {
       console.warn('element ALREADY playing, so ignore');
       return;
     }
     element.srcObject = stream;
     element.volume = 0;
+    element.controls = true;
     this.isStartedMedia = true;
     return element.play();
   }
 
-  pauseVideo(element) {
+  pauseAudio(element) {
     element.pause();
     element.srcObject = null;
   }
-
-  // checkUseVideo() {
-  //   const useVideo = document.getElementById('use_video').checked;
-  //   return useVideo;
-  // }
-
-  // checkUseAudio() {
-  //   const useAudio = document.getElementById('use_audio').checked;
-  //   return useAudio;
-  // }
 
   startMedia() {
     if (this.localStream) {
@@ -151,13 +143,11 @@ export class LivestreamComponent implements OnInit, AfterViewInit, OnDestroy {
       return;
     }
 
-    const useVideo = true;
-    const useAudio = true;
-
-    navigator.mediaDevices.getUserMedia({ audio: useAudio, video: useVideo })
+    navigator.mediaDevices.getUserMedia({ audio: true, video: false })
       .then((stream) => {
         this.localStream = stream;
-        this.playVideo(this.localVideo, this.localStream);
+        // this.record(stream);
+        this.playAudio(this.localAudio, this.localStream);
       })
       .catch(err => {
         console.error('media ERROR:', err);
@@ -166,10 +156,27 @@ export class LivestreamComponent implements OnInit, AfterViewInit, OnDestroy {
 
   stopMedia() {
     if (this.localStream) {
-      this.pauseVideo(this.localVideo);
+      this.pauseAudio(this.localAudio);
       this.stopLocalStream(this.localStream);
       this.localStream = null;
     }
+  }
+
+  record(stream) {
+    this.recorder = new mediaStreamRecorder(stream);
+    this.recorder.mimeType = 'audio/wav';
+    this.recorder.ondataavailable = function (blob) {
+      var blobURL = URL.createObjectURL(blob);
+      document.write('<a href="' + blobURL + '">' + blobURL + '</a>');
+    };
+    this.recorder.start();
+  }
+
+  download() {
+    this.recorder.stop();
+    setTimeout(() => {
+      this.recorder.save();
+    }, 2000);
   }
 
   async publish() {
@@ -241,34 +248,34 @@ export class LivestreamComponent implements OnInit, AfterViewInit, OnDestroy {
       }
     });
 
-    const useVideo = true;
-    const useAudio = true;
-    if (useVideo) {
-      const videoTrack = this.localStream.getVideoTracks()[0];
-      if (videoTrack) {
-        const trackParams = { track: videoTrack };
-        this.videoProducer = await this.producerTransport.produce(trackParams);
-      }
+    // const useVideo = false;
+    // const useAudio = true;
+    // if (useVideo) {
+    //   const videoTrack = this.localStream.getVideoTracks()[0];
+    //   if (videoTrack) {
+    //     const trackParams = { track: videoTrack };
+    //     this.videoProducer = await this.producerTransport.produce(trackParams);
+    //   }
+    // }
+    // if (useAudio) {
+    const audioTrack = this.localStream.getAudioTracks()[0];
+    if (audioTrack) {
+      const trackParams = { track: audioTrack };
+      this.audioProducer = await this.producerTransport.produce(trackParams);
     }
-    if (useAudio) {
-      const audioTrack = this.localStream.getAudioTracks()[0];
-      if (audioTrack) {
-        const trackParams = { track: audioTrack };
-        this.audioProducer = await this.producerTransport.produce(trackParams);
-      }
-    }
+    // }
   }
 
   disconnect() {
     if (this.localStream) {
-      this.pauseVideo(this.localVideo);
+      this.pauseAudio(this.localAudio);
       this.stopLocalStream(this.localStream);
       this.localStream = null;
     }
-    if (this.videoProducer) {
-      this.videoProducer.close(); // localStream will stop
-      this.videoProducer = null;
-    }
+    // if (this.videoProducer) {
+    //   this.videoProducer.close(); // localStream will stop
+    //   this.videoProducer = null;
+    // }
     if (this.audioProducer) {
       this.audioProducer.close(); // localStream will stop
       this.audioProducer = null;
