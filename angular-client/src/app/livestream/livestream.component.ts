@@ -1,7 +1,8 @@
 import { Component, OnInit, AfterViewInit, OnDestroy } from '@angular/core';
 import { Socket } from 'ngx-socket-io';
 import * as mediasoupClient from "mediasoup-client";
-const mediaStreamRecorder = require('msr');
+import { AudioRecordService } from '../audio-record.service';
+declare var MediaRecorder: any;
 let this$;
 
 @Component({
@@ -13,7 +14,6 @@ export class LivestreamComponent implements OnInit, AfterViewInit, OnDestroy {
   clientId = null;
   device = null;
   producerTransport = null;
-  // videoProducer = null;
   audioProducer = null;
   localAudio: any;
   localStream: MediaStream;
@@ -21,8 +21,11 @@ export class LivestreamComponent implements OnInit, AfterViewInit, OnDestroy {
   isPublished = false;
   isStartedMedia = false;
 
-  recorder: any;
-  constructor(private socket: Socket) {
+	mediaRecorder:any;
+  chunks = [];
+  audioFiles = [];
+  
+  constructor(private socket: Socket, private recorder: AudioRecordService) {
 
   }
   ngOnDestroy(): void {
@@ -115,7 +118,6 @@ export class LivestreamComponent implements OnInit, AfterViewInit, OnDestroy {
       console.warn('NO tracks');
       return;
     }
-    // this.download();
     tracks.forEach(track => track.stop());
     this.isStartedMedia = false;
   }
@@ -143,10 +145,10 @@ export class LivestreamComponent implements OnInit, AfterViewInit, OnDestroy {
       return;
     }
 
-    navigator.mediaDevices.getUserMedia({ audio: true, video: false })
+    navigator.mediaDevices.getUserMedia({ audio: true })
       .then((stream) => {
         this.localStream = stream;
-        // this.record(stream);
+        this.recorder.startRecording(stream);
         this.playAudio(this.localAudio, this.localStream);
       })
       .catch(err => {
@@ -154,29 +156,31 @@ export class LivestreamComponent implements OnInit, AfterViewInit, OnDestroy {
       });
   }
 
+  pauseMedia() {
+    this.recorder.pauseRecording();
+  }
+
+  resumeMedia() {
+    this.recorder.resumeRecording();
+  }
+
+  download(data) {
+    const a =  document.createElement('a');
+    a.href = URL.createObjectURL(data.blob);
+    a.download = data.title;
+    a.click();
+  }
+
   stopMedia() {
     if (this.localStream) {
+      this.recorder.stopRecording();
+      this.recorder.getRecordedBlob().subscribe(data => {
+        this.download(data);
+      })
       this.pauseAudio(this.localAudio);
       this.stopLocalStream(this.localStream);
       this.localStream = null;
     }
-  }
-
-  record(stream) {
-    this.recorder = new mediaStreamRecorder(stream);
-    this.recorder.mimeType = 'audio/wav';
-    this.recorder.ondataavailable = function (blob) {
-      var blobURL = URL.createObjectURL(blob);
-      document.write('<a href="' + blobURL + '">' + blobURL + '</a>');
-    };
-    this.recorder.start();
-  }
-
-  download() {
-    this.recorder.stop();
-    setTimeout(() => {
-      this.recorder.save();
-    }, 2000);
   }
 
   async publish() {
@@ -248,22 +252,20 @@ export class LivestreamComponent implements OnInit, AfterViewInit, OnDestroy {
       }
     });
 
-    // const useVideo = false;
-    // const useAudio = true;
-    // if (useVideo) {
-    //   const videoTrack = this.localStream.getVideoTracks()[0];
-    //   if (videoTrack) {
-    //     const trackParams = { track: videoTrack };
-    //     this.videoProducer = await this.producerTransport.produce(trackParams);
-    //   }
-    // }
-    // if (useAudio) {
     const audioTrack = this.localStream.getAudioTracks()[0];
     if (audioTrack) {
       const trackParams = { track: audioTrack };
       this.audioProducer = await this.producerTransport.produce(trackParams);
     }
-    // }
+
+  }
+
+  async pauseLiveStream() {
+    await this.sendRequest('pause', this$.clientId);
+  }
+
+  async resumeLiveStream() {
+    await this.sendRequest('resume', this$.clientId);
   }
 
   disconnect() {
@@ -272,10 +274,7 @@ export class LivestreamComponent implements OnInit, AfterViewInit, OnDestroy {
       this.stopLocalStream(this.localStream);
       this.localStream = null;
     }
-    // if (this.videoProducer) {
-    //   this.videoProducer.close(); // localStream will stop
-    //   this.videoProducer = null;
-    // }
+
     if (this.audioProducer) {
       this.audioProducer.close(); // localStream will stop
       this.audioProducer = null;

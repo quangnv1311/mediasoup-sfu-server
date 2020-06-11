@@ -12,7 +12,6 @@ export class SubcribeComponent implements OnInit, AfterViewInit, OnDestroy {
   clientId = null;
   device = null;
   consumerTransport = null;
-  // videoConsumer = null;
   audioConsumer = null;
   remoteContainer: any;
   isSubcribed = false;
@@ -67,11 +66,7 @@ export class SubcribeComponent implements OnInit, AfterViewInit, OnDestroy {
         console.log('socket.io newProducer:', message);
         if (this$.consumerTransport) {
           // start consume
-          if (message.kind === 'video') {
-            // this$.videoConsumer = await this$.consumeAndResume(this$.consumerTransport, message.kind);
-          } else if (message.kind === 'audio') {
-            this$.audioConsumer = await this$.consumeAndResume(this$.consumerTransport, message.kind);
-          }
+          this$.audioConsumer = await this$.consumeAndResume(this$.consumerTransport, message.kind);
         }
       });
 
@@ -81,16 +76,10 @@ export class SubcribeComponent implements OnInit, AfterViewInit, OnDestroy {
         const remoteId = message.remoteId;
         const kind = message.kind;
         console.log('--try removeConsumer remoteId=' + remoteId + ', localId=' + localId + ', kind=' + kind);
-        if (kind === 'video') {
-          // if (this$.videoConsumer) {
-            // this$.videoConsumer.close();
-            // this$.videoConsumer = null;
-          // }
-        } else if (kind === 'audio') {
-          if (this$.audioConsumer) {
-            this$.audioConsumer.close();
-            this$.audioConsumer = null;
-          }
+
+        if (this$.audioConsumer) {
+          this$.audioConsumer.close();
+          this$.audioConsumer = null;
         }
 
         if (remoteId) {
@@ -125,7 +114,6 @@ export class SubcribeComponent implements OnInit, AfterViewInit, OnDestroy {
     return new Promise((resolve, reject) => {
       this.socket.emit(type, data, (err, response) => {
         if (!err) {
-          // Success response, so pass the mediasoup response to the local Room.
           resolve(response);
         } else {
           reject(err);
@@ -242,8 +230,6 @@ export class SubcribeComponent implements OnInit, AfterViewInit, OnDestroy {
       })
         .then(callback)
         .catch(errback);
-
-      //consumer = await consumeAndResume(consumerTransport);
     });
 
     this.consumerTransport.on('connectionstatechange', (state) => {
@@ -266,30 +252,13 @@ export class SubcribeComponent implements OnInit, AfterViewInit, OnDestroy {
       }
     });
 
-    // this.videoConsumer = await this.consumeAndResume(this.consumerTransport, 'video');
     this.audioConsumer = await this.consumeAndResume(this.consumerTransport, 'audio');
   }
 
   async consumeAndResume(transport, kind) {
     const consumer = await this.consume(this.consumerTransport, kind);
     if (consumer) {
-      console.log('-- track exist, consumer ready. kind=' + kind);
-      if (kind === 'video') {
-        console.log('-- resume kind=' + kind);
-        this.sendRequest('resume', {
-          kind: kind
-        })
-          .then(() => {
-            console.log('resume OK');
-            return consumer;
-          })
-          .catch(err => {
-            console.error('resume ERROR:', err);
-            return consumer;
-          });
-      } else {
-        console.log('-- do not resume kind=' + kind);
-      }
+      console.log('-- do not resume kind=' + kind);
     } else {
       console.log('-- no consumer yet. kind=' + kind);
       return null;
@@ -297,10 +266,6 @@ export class SubcribeComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   disconnect() {
-    // if (this.videoConsumer) {
-    //   this.videoConsumer.close();
-    //   this.videoConsumer = null;
-    // }
     if (this.audioConsumer) {
       this.audioConsumer.close();
       this.audioConsumer = null;
@@ -331,13 +296,12 @@ export class SubcribeComponent implements OnInit, AfterViewInit, OnDestroy {
   async consume(transport, trackKind) {
     console.log('--start of consume --kind=' + trackKind);
     const { rtpCapabilities } = this.device;
-    //const data = await socket.request('consume', { rtpCapabilities });
     const data = await this.sendRequest('consume', {
-      rtpCapabilities: rtpCapabilities,
+      rtpCapabilities: JSON.stringify(rtpCapabilities),
       kind: trackKind
     }).catch(err => {
-        console.error('consume ERROR:', err);
-      });
+      console.error('consume ERROR:', err);
+    });
 
     const dataAs = data as any;
     const producerId = dataAs.producerId;
@@ -356,7 +320,7 @@ export class SubcribeComponent implements OnInit, AfterViewInit, OnDestroy {
       });
 
       this.addRemoteTrack(this.clientId, consumer.track);
-
+ 
       console.log('--end of consume');
 
       return consumer;

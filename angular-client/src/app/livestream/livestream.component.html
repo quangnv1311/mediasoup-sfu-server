@@ -1,4 +1,6 @@
 <button [disabled]="isStartedMedia" id="start_video_button" (click)="startMedia()">Get Media</button>
+<button [disabled]="!isStartedMedia" id="start_video_button" (click)="pauseMedia()">Pause Media</button>
+<button [disabled]="!isStartedMedia" id="start_video_button" (click)="resumeMedia()">Resume Media</button>
 <button [disabled]="!isStartedMedia || isPublished" id="stop_video_button" (click)="stopMedia()">Stop Media</button>
 &nbsp;
 <button [disabled]="!isStartedMedia || isPublished" id="publish_button" (click)="publish()">Phát</button>

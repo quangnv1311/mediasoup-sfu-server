@@ -1,20 +1,18 @@
-'use strict';
 require("dotenv").config();
 const fs = require('fs');
 
 const config = {
-  ipMediaSoup: process.env.IP_MEDIA_SOUP || 'localhost',
-  ipPublicMediaSoup: process.env.PUBLIC_IP_MEDIA_SOUP || 'localhost'
+  ipMediaSoup: process.env.IP_MEDIA_SOUP || '127.0.0.1',
+  ipPublicMediaSoup: process.env.PUBLIC_IP_MEDIA_SOUP || '127.0.0.1',
 };
 
 let serverOptions = {
   hostName: process.env.HOST || '127.0.0.1',
   listenPort: process.env.PORT || 3000,
-  useHttps: true,
-  httpsKeyFile:  process.env.SSL_KEY_FILE || 'keys/server.key',
+  httpsKeyFile: process.env.SSL_KEY_FILE || 'keys/server.key',
   httpsCertFile: process.env.SSL_CERT_FILE || 'keys/server.crt',
   rtcMinPort: process.env.RTC_MIN_PORT || 10000,
-  rtcMaxPort: process.env.RTC_MAX_PORT || 20000
+  rtcMaxPort: process.env.RTC_MAX_PORT || 59999
 };
 
 console.log(serverOptions, config);
@@ -24,12 +22,14 @@ let sslOptions = {
   cert: ''
 };
 
-if (serverOptions.useHttps) {
+if(isFileExist(serverOptions.httpsKeyFile) && isFileExist(serverOptions.httpsCertFile)) {
   sslOptions.key = fs.readFileSync(serverOptions.httpsKeyFile).toString();
   sslOptions.cert = fs.readFileSync(serverOptions.httpsCertFile).toString();
+} else {
+  console.log('==== SSL cert path is not valid ====');
+  process.exit();
 }
 
-const http = require("http");
 const https = require("https");
 const express = require('express');
 
@@ -38,33 +38,21 @@ const webPort = serverOptions.listenPort;
 app.use(express.static('public'));
 
 let webServer = null;
-if (serverOptions.useHttps) {
 
-  webServer = https.createServer(sslOptions, app).listen(webPort, function () {
-    console.log('Media server start on https://' + serverOptions.hostName + ':' + webServer.address().port + '/');
-    console.log(`RTC port range: ${serverOptions.rtcMinPort} - ${serverOptions.rtcMaxPort}`)
-  });
-}
-else {
-
-  webServer = http.Server(app).listen(webPort, function () {
-    console.log('Media server start on http://' + serverOptions.hostName + ':' + webServer.address().port + '/');
-  });
-}
-
+webServer = https.createServer(sslOptions, app).listen(webPort, function () {
+  console.log('Media server start on https://' + serverOptions.hostName + ':' + webServer.address().port + '/');
+  console.log(`RTC port range: ${serverOptions.rtcMinPort} - ${serverOptions.rtcMaxPort}`)
+});
 
 function isFileExist(path) {
   try {
     fs.accessSync(path, fs.constants.R_OK);
     return true;
-  }
-  catch (err) {
+  } catch (err) {
     if (err.code === 'ENOENT') {
       return false
     }
   }
-
-  console.error('MUST NOT come here');
   return false;
 }
 
@@ -91,77 +79,74 @@ io.on('connection', function (socket) {
     if (router) {
       console.log('getRouterRtpCapabilities: ', router.rtpCapabilities);
       sendResponse(router.rtpCapabilities, callback);
-    }
-    else {
-      sendReject({ text: 'ERROR- router NOT READY' }, callback);
+    } else {
+      sendReject({
+        text: 'ERROR- router NOT READY'
+      }, callback);
     }
   });
 
   // --- producer ----
   socket.on('createProducerTransport', async (data, callback) => {
-    console.log('-- createProducerTransport ---');
+    console.log('createProducerTransport');
     producerSocketId = getId(socket);
-    const { transport, params } = await createTransport();
+    const {
+      transport,
+      params
+    } = await createTransport();
     producerTransport = transport;
     producerTransport.observer.on('close', () => {
-      if (videoProducer) {
-        videoProducer.close();
-        videoProducer = null;
-      }
       if (audioProducer) {
         audioProducer.close();
         audioProducer = null;
       }
       producerTransport = null;
     });
-    //console.log('-- createProducerTransport params:', params);
     sendResponse(params, callback);
   });
 
   socket.on('connectProducerTransport', async (data, callback) => {
-    await producerTransport.connect({ dtlsParameters: data.dtlsParameters });
+    await producerTransport.connect({
+      dtlsParameters: data.dtlsParameters
+    });
     sendResponse({}, callback);
   });
 
   socket.on('produce', async (data, callback) => {
-    const { kind, rtpParameters } = data;
-    console.log('-- produce --- kind=', kind);
-    if (kind === 'video') {
-      videoProducer = await producerTransport.produce({ kind, rtpParameters });
-      videoProducer.observer.on('close', () => {
-        console.log('videoProducer closed ---');
-      })
-      sendResponse({ id: videoProducer.id }, callback);
-    }
-    else if (kind === 'audio') {
-      audioProducer = await producerTransport.produce({ kind, rtpParameters });
-      audioProducer.observer.on('close', () => {
-        console.log('audioProducer closed ---');
-      })
-      sendResponse({ id: audioProducer.id }, callback);
-    }
-    else {
-      console.error('produce ERROR. BAD kind:', kind);
-      return;
-    }
+    const {
+      kind,
+      rtpParameters
+    } = data;
+    console.log('produce: kind=', kind);
+    audioProducer = await producerTransport.produce({
+      kind,
+      rtpParameters
+    });
 
-    console.log('--broadcast newProducer -- kind=', kind);
-    socket.broadcast.emit('newProducer', { kind: kind });
+    audioProducer.observer.on('close', () => {
+      console.log('audioProducer closed');
+    })
+    sendResponse({
+      id: audioProducer.id
+    }, callback);
+
+    console.log('broadcast newProducer: kind=', kind);
+    socket.broadcast.emit('newProducer', {
+      kind: kind
+    });
   });
 
   // --- consumer ----
   socket.on('createConsumerTransport', async (data, callback) => {
-    console.log('-- createConsumerTransport ---');
-    const { transport, params } = await createTransport();
+    console.log('createConsumerTransport');
+    const {
+      transport,
+      params
+    } = await createTransport();
     addConsumerTrasport(getId(socket), transport);
     transport.observer.on('close', () => {
       const id = getId(socket);
-      console.log('--- consumerTransport closed. --')
-      let consumer = getVideoConsumer(getId(socket));
-      if (consumer) {
-        consumer.close();
-        removeVideoConsumer(id);
-      }
+      console.log('consumerTransport closed')
       consumer = getAudioConsumer(getId(socket));
       if (consumer) {
         consumer.close();
@@ -173,109 +158,78 @@ io.on('connection', function (socket) {
   });
 
   socket.on('connectConsumerTransport', async (data, callback) => {
-    console.log('-- connectConsumerTransport ---');
+    console.log('connectConsumerTransport');
     let transport = getConsumerTrasnport(getId(socket));
     if (!transport) {
-      console.error('transport NOT EXIST for id=' + getId(socket));
+      console.error('transport not exist for id=' + getId(socket));
       sendResponse({}, callback);
       return;
     }
-    await transport.connect({ dtlsParameters: data.dtlsParameters });
+    await transport.connect({
+      dtlsParameters: data.dtlsParameters
+    });
     sendResponse({}, callback);
   });
 
   socket.on('consume', async (data, callback) => {
-    const kind = data.kind;
-    console.log('-- consume --kind=' + kind);
+    const rtpCapabilities = JSON.parse(data.rtpCapabilities);
+    const kind = 'audio';
+    console.log('consume: kind=' + kind);
+    if (audioProducer) {
+      let transport = getConsumerTrasnport(getId(socket));
+      if (!transport) {
+        console.error('transport not exist for id=' + getId(socket));
+        return;
+      }
+      const {
+        consumer,
+        params
+      } = await createConsumer(transport, audioProducer, rtpCapabilities);
+      const id = getId(socket);
+      addAudioConsumer(id, consumer);
+      consumer.observer.on('close', () => {
+        console.log('consumer closed');
+      })
+      consumer.on('producerclose', () => {
+        console.log('consumer: on.producerclose');
+        consumer.close();
+        removeAudioConsumer(id);
 
-    if (kind === 'video') {
-      if (videoProducer) {
-        let transport = getConsumerTrasnport(getId(socket));
-        if (!transport) {
-          console.error('transport NOT EXIST for id=' + getId(socket));
-          return;
-        }
-        const { consumer, params } = await createConsumer(transport, videoProducer, data.rtpCapabilities);
-        const id = getId(socket);
-        addVideoConsumer(id, consumer);
-        consumer.observer.on('close', () => {
-          console.log('consumer closed ---');
-        })
-        consumer.on('producerclose', () => {
-          console.log('consumer -- on.producerclose');
-          consumer.close();
-          removeVideoConsumer(id);
-
-          // -- notify to client ---
-          socket.emit('producerClosed', { localId: id, remoteId: producerSocketId, kind: 'video' });
+        // -- notify to client ---
+        socket.emit('producerClosed', {
+          localId: id,
+          remoteId: producerSocketId,
+          kind: 'audio'
         });
+      });
 
-        console.log('-- consumer ready ---');
-        sendResponse(params, callback);
-      }
-      else {
-        console.log('-- consume, but video producer NOT READY');
-        const params = { producerId: null, id: null, kind: 'video', rtpParameters: {} };
-        sendResponse(params, callback);
-      }
+      console.log('consumer ready');
+      sendResponse(params, callback);
+    } else {
+      console.log('consume, but audio producer not ready');
+      const params = {
+        producerId: null,
+        id: null,
+        kind: 'audio',
+        rtpParameters: {}
+      };
+      sendResponse(params, callback);
     }
-    else if (kind === 'audio') {
-      if (audioProducer) {
-        let transport = getConsumerTrasnport(getId(socket));
-        if (!transport) {
-          console.error('transport NOT EXIST for id=' + getId(socket));
-          return;
-        }
-        const { consumer, params } = await createConsumer(transport, audioProducer, data.rtpCapabilities);
-        const id = getId(socket);
-        addAudioConsumer(id, consumer);
-        consumer.observer.on('close', () => {
-          console.log('consumer closed ---');
-        })
-        consumer.on('producerclose', () => {
-          console.log('consumer -- on.producerclose');
-          consumer.close();
-          removeAudioConsumer(id);
+  });
 
-          // -- notify to client ---
-          socket.emit('producerClosed', { localId: id, remoteId: producerSocketId, kind: 'audio' });
-        });
-
-        console.log('-- consumer ready ---');
-        sendResponse(params, callback);
-      }
-      else {
-        console.log('-- consume, but audio producer NOT READY');
-        const params = { producerId: null, id: null, kind: 'audio', rtpParameters: {} };
-        sendResponse(params, callback);
-      }
-    }
-    else {
-      console.error('ERROR: UNKNOWN kind=' + kind);
-    }
+  socket.on('pause', async (data, callback) => {
+    audioProducer.pause();
+    audioProducer.on('producerpause', () => {
+      sendResponse({paused: true}, callback);
+    });
   });
 
   socket.on('resume', async (data, callback) => {
-    const kind = data.kind;
-    console.log('-- resume -- kind=' + kind);
-    if (kind === 'video') {
-      let consumer = getVideoConsumer(getId(socket));
-      if (!consumer) {
-        console.error('consumer NOT EXIST for id=' + getId(socket));
-        sendResponse({}, callback);
-        return;
-      }
-      await consumer.resume();
-      sendResponse({}, callback);
-    }
-    else {
-      console.warn('NO resume for audio');
-    }
+    audioProducer.resume();
+    audioProducer.on('producerresume', () => {
+      sendResponse({resumed: true}, callback);
+    });
   });
-
-  // ---- sendback welcome message with on connected ---
-  const newId = getId(socket);
-  sendback(socket, { type: 'welcome', id: newId });
 
   // --- send response to client ---
   function sendResponse(response, callback) {
@@ -285,10 +239,6 @@ io.on('connection', function (socket) {
   // --- send error to client ---
   function sendReject(error, callback) {
     callback(error.toString(), null);
-  }
-
-  function sendback(socket, message) {
-    socket.emit('message', message);
   }
 });
 
@@ -302,11 +252,6 @@ function getClientCount() {
 
 function cleanUpPeer(socket) {
   const id = getId(socket);
-  const consumer = getVideoConsumer(id);
-  if (consumer) {
-    consumer.close();
-    removeVideoConsumer(id);
-  }
 
   const transport = getConsumerTrasnport(id);
   if (transport) {
@@ -315,11 +260,7 @@ function cleanUpPeer(socket) {
   }
 
   if (producerSocketId === id) {
-    console.log('---- cleanup producer ---');
-    if (videoProducer) {
-      videoProducer.close();
-      videoProducer = null;
-    }
+    console.log('cleanup producer');
     if (audioProducer) {
       audioProducer.close();
       audioProducer = null;
@@ -348,40 +289,25 @@ const mediasoupOptions = {
       'dtls',
       'rtp',
       'srtp',
-      'rtcp',
-      // 'rtx',
-      // 'bwe',
-      // 'score',
-      // 'simulcast',
-      // 'svc'
+      'rtcp'
     ],
   },
   // Router settings
   router: {
-    mediaCodecs:
-      [
-        {
-          kind: 'audio',
-          mimeType: 'audio/opus',
-          clockRate: 48000,
-          channels: 2
-        },
-        // {
-        //   kind: 'video',
-        //   mimeType: 'video/VP8',
-        //   clockRate: 90000,
-        //   parameters:
-        //   {
-        //     'x-google-start-bitrate': 1000
-        //   }
-        // },
-      ]
+    mediaCodecs: [{
+        kind: 'audio',
+        mimeType: 'audio/opus',
+        clockRate: 48000,
+        channels: 2
+      }
+    ]
   },
   // WebRtcTransport settings
   webRtcTransport: {
-    listenIps: [
-      { ip: config.ipMediaSoup, announcedIp: config.ipPublicMediaSoup }
-    ],
+    listenIps: [{
+      ip: config.ipMediaSoup,
+      announcedIp: config.ipPublicMediaSoup
+    }],
     enableUdp: true,
     enableTcp: true,
     preferUdp: true,
@@ -392,26 +318,31 @@ const mediasoupOptions = {
 };
 
 let worker = null;
+let worker2 =  null; //Use multi cpu
 let router = null;
+let router2 = null; //Use multi cpu
+
 let producerTransport = null;
-let videoProducer = null;
 let audioProducer = null;
 let producerSocketId = null;
-//let consumerTransport = null;
-//let subscribeConsumer = null;
-
 
 async function startWorker() {
   const mediaCodecs = mediasoupOptions.router.mediaCodecs;
-  worker = await mediasoup.createWorker();
-  router = await worker.createRouter({ mediaCodecs });
-  console.log('-- mediasoup worker start. --')
+  worker = await mediasoup.createWorker(mediasoupOptions.worker);
+  worker2 = await mediasoup.createWorker(mediasoupOptions.worker);
+
+  router = await worker.createRouter({
+    mediaCodecs
+  });
+  router2 = await worker2.createRouter({
+    mediaCodecs
+  });
+  console.log('Mediasoup 2 workers started')
 }
 
 startWorker();
 
 let transports = {};
-let videoConsumers = {};
 let audioConsumers = {};
 
 function getConsumerTrasnport(id) {
@@ -428,20 +359,6 @@ function removeConsumerTransport(id) {
   console.log('consumerTransports count=' + Object.keys(transports).length);
 }
 
-function getVideoConsumer(id) {
-  return videoConsumers[id];
-}
-
-function addVideoConsumer(id, consumer) {
-  videoConsumers[id] = consumer;
-  console.log('videoConsumers count=' + Object.keys(videoConsumers).length);
-}
-
-function removeVideoConsumer(id) {
-  delete videoConsumers[id];
-  console.log('videoConsumers count=' + Object.keys(videoConsumers).length);
-}
-
 function getAudioConsumer(id) {
   return audioConsumers[id];
 }
@@ -456,26 +373,9 @@ function removeAudioConsumer(id) {
   console.log('audioConsumers count=' + Object.keys(audioConsumers).length);
 }
 
-function removeAllConsumers() {
-  for (const key in videoConsumers) {
-    const consumer = videoConsumers[key];
-    console.log('key=' + key + ',  consumer:', consumer);
-    consumer.close();
-    delete videoConsumers[key];
-  }
-  console.log('removeAllConsumers videoConsumers count=' + Object.keys(videoConsumers).length);
-
-  for (const key in audioConsumers) {
-    const consumer = audioConsumers[key];
-    console.log('key=' + key + ',  consumer:', consumer);
-    consumer.close();
-    delete audioConsumers[key];
-  }
-}
-
 async function createTransport() {
   const transport = await router.createWebRtcTransport(mediasoupOptions.webRtcTransport);
-  console.log('-- create transport id=' + transport.id);
+  console.log('create transport id=' + transport.id);
 
   return {
     transport: transport,
@@ -490,12 +390,10 @@ async function createTransport() {
 
 async function createConsumer(transport, producer, rtpCapabilities) {
   let consumer = null;
-  if (!router.canConsume(
-    {
+  if (!router.canConsume({
       producerId: producer.id,
       rtpCapabilities,
-    })
-  ) {
+    })) {
     console.error('can not consume');
     return;
   }
@@ -503,7 +401,7 @@ async function createConsumer(transport, producer, rtpCapabilities) {
   consumer = await transport.consume({ // OK
     producerId: producer.id,
     rtpCapabilities,
-    paused: producer.kind === 'video',
+    paused: false, // Audio is not nessecary paused
   }).catch(err => {
     console.error('consume failed', err);
     return;
