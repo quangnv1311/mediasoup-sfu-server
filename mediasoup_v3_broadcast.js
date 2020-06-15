@@ -1,9 +1,11 @@
+/*global process require ...*/
 require("dotenv").config();
 const fs = require('fs');
 
 const config = {
   ipMediaSoup: process.env.IP_MEDIA_SOUP || '127.0.0.1',
   ipPublicMediaSoup: process.env.PUBLIC_IP_MEDIA_SOUP || '127.0.0.1',
+  dsServer: process.env.DS_SERVER || '127.0.0.1:8088'
 };
 
 let serverOptions = {
@@ -14,8 +16,6 @@ let serverOptions = {
   rtcMinPort: process.env.RTC_MIN_PORT || 10000,
   rtcMaxPort: process.env.RTC_MAX_PORT || 59999
 };
-
-console.log(serverOptions, config);
 
 let sslOptions = {
   key: '',
@@ -32,12 +32,15 @@ if(isFileExist(serverOptions.httpsKeyFile) && isFileExist(serverOptions.httpsCer
 
 const https = require("https");
 const express = require('express');
+const axios  = require('axios').default;
 
 const app = express();
 const webPort = serverOptions.listenPort;
 app.use(express.static('public'));
 
 let webServer = null;
+let devices = [];
+let consumerSocketIds = [];
 
 webServer = https.createServer(sslOptions, app).listen(webPort, function () {
   console.log('Media server start on https://' + serverOptions.hostName + ':' + webServer.address().port + '/');
@@ -59,6 +62,27 @@ function isFileExist(path) {
 // --- socket.io server ---
 const io = require('socket.io')(webServer);
 console.log('socket.io server start. port=' + webServer.address().port);
+
+io.use((socket, next) => {
+  const type = socket.handshake.query.type;
+  if(type === 'device') {
+    const device_id = socket.handshake.query.device_id;
+    axios.post(`${config.dsServer}/api/player/ping`).then(res => {
+      next();
+      devices.push({id: device_id, socketId: getId(socket)});
+      console.log('Devices ==>', devices);
+    })
+    .catch(err => {
+      next('Authentication error: ' + err);
+    });
+  } else if (type === 'broadcast') {
+    next();
+    console.log('Admin connected');
+  } else {
+    console.log('Type is not valid');
+    return;
+  }
+});
 
 io.on('connection', function (socket) {
   console.log('client connected. socket id=' + getId(socket) + '  , total clients=' + getClientCount());
@@ -115,9 +139,15 @@ io.on('connection', function (socket) {
   socket.on('produce', async (data, callback) => {
     const {
       kind,
-      rtpParameters
+      rtpParameters,
+      devices
     } = data;
     console.log('produce: kind=', kind);
+    devices.forEach(deviceId => {
+      if(getDeviceSocketId(deviceId)) {
+        consumerSocketIds.push(getDeviceSocketId(deviceId));
+      }
+    });
     audioProducer = await producerTransport.produce({
       kind,
       rtpParameters
@@ -131,8 +161,10 @@ io.on('connection', function (socket) {
     }, callback);
 
     console.log('broadcast newProducer: kind=', kind);
-    socket.broadcast.emit('newProducer', {
-      kind: kind
+    consumerSocketIds.forEach(consumerSocketId => {
+      socket.to(consumerSocketId).emit('newProducer', {
+        kind: kind
+      });
     });
   });
 
@@ -146,8 +178,8 @@ io.on('connection', function (socket) {
     addConsumerTrasport(getId(socket), transport);
     transport.observer.on('close', () => {
       const id = getId(socket);
-      console.log('consumerTransport closed')
-      consumer = getAudioConsumer(getId(socket));
+      console.log('consumerTransport closed');
+      const consumer = getAudioConsumer(getId(socket));
       if (consumer) {
         consumer.close();
         removeAudioConsumer(id);
@@ -196,10 +228,12 @@ io.on('connection', function (socket) {
         removeAudioConsumer(id);
 
         // -- notify to client ---
-        socket.emit('producerClosed', {
-          localId: id,
-          remoteId: producerSocketId,
-          kind: 'audio'
+        consumerSocketIds.forEach(consumerSocketId => {
+          socket.to(consumerSocketId).emit('producerClosed', {
+            localId: id,
+            remoteId: producerSocketId,
+            kind: 'audio'
+          });
         });
       });
 
@@ -241,6 +275,14 @@ io.on('connection', function (socket) {
     callback(error.toString(), null);
   }
 });
+
+function getDeviceSocketId(deviceId) {
+  const device = devices.find(d => d.id === deviceId);
+  if(device) {
+    return device.socketId;
+  }
+  return null;
+}
 
 function getId(socket) {
   return socket.id;
