@@ -5,7 +5,7 @@ const fs = require('fs');
 const config = {
   ipMediaSoup: process.env.IP_MEDIA_SOUP || '127.0.0.1',
   ipPublicMediaSoup: process.env.PUBLIC_IP_MEDIA_SOUP || '127.0.0.1',
-  dsServer: process.env.DS_SERVER || '127.0.0.1:8088'
+  dsServer: process.env.DS_SERVER || 'https://127.0.0.1:8488'
 };
 
 let serverOptions = {
@@ -59,35 +59,40 @@ function isFileExist(path) {
 
 // --- socket.io server ---
 const io = require('socket.io')(webServer);
-console.log('socket.io server start. port=' + webServer.address().port);
+// console.log('socket.io server start. port=' + webServer.address().port);
 
 io.use((socket, next) => {
-  const type = socket.handshake.query.type;
-  if (type === 'device') {
-    const token = socket.handshake.query.token;
-    axios.post(`${config.dsServer}/api/player/ping`, {
+  const token = socket.handshake.query.token;
+
+  //SSL fake
+  const instance = axios.create({
+    httpsAgent: new https.Agent({  
+      rejectUnauthorized: false
+    })
+  });
+  instance.get(`${config.dsServer}/api/player/validate_token`, {
+      params: {
         token: token
-      }).then(res => {
+      }
+    }).then(res => {
+      if (res.data.status === 'success') {
         next();
-      })
-      .catch(err => {
-        next('Authentication error: ' + err);
-      });
-  } else if (type === 'broadcast') {
-    next();
-    console.log('Admin connected');
-  } else {
-    console.log('Type is not valid');
-    return;
-  }
+      } else {
+        next('Authentication error');
+      }
+    })
+    .catch(err => {
+      next('Authentication error: ' + err);
+      console.log(err);
+    });
 });
 
 io.on('connection', function (socket) {
-  console.log('client connected. socket id=' + getId(socket) + '  , total clients=' + getClientCount());
+  // console.log('client connected. socket id=' + getId(socket) + '  , total clients=' + getClientCount());
 
   socket.on('disconnect', function () {
     // close user connection
-    console.log('client disconnected. socket id=' + getId(socket) + '  , total clients=' + getClientCount());
+    // console.log('client disconnected. socket id=' + getId(socket) + '  , total clients=' + getClientCount());
     cleanUpPeer(socket);
   });
   socket.on('error', function (err) {
@@ -99,7 +104,7 @@ io.on('connection', function (socket) {
 
   socket.on('getRouterRtpCapabilities', (data, callback) => {
     if (router) {
-      console.log('getRouterRtpCapabilities: ', router.rtpCapabilities);
+      // console.log('getRouterRtpCapabilities: ', router.rtpCapabilities);
       sendResponse(router.rtpCapabilities, callback);
     } else {
       sendReject({
@@ -110,7 +115,11 @@ io.on('connection', function (socket) {
 
   // --- producer ----
   socket.on('createProducerTransport', async (data, callback) => {
-    console.log('createProducerTransport');
+    // console.log('createProducerTransport');
+    console.log(producerTransport);
+    if(producerTransport !== null) {
+      sendResponse({existLiveStream: true}, callback);
+    }
     producerSocketId = getId(socket);
     const {
       transport,
@@ -139,7 +148,7 @@ io.on('connection', function (socket) {
       kind,
       rtpParameters
     } = data;
-    console.log('produce: kind=', kind);
+    // console.log('produce: kind=', kind);
     audioProducer = await producerTransport.produce({
       kind,
       rtpParameters
@@ -152,7 +161,7 @@ io.on('connection', function (socket) {
       id: audioProducer.id
     }, callback);
 
-    console.log('broadcast newProducer: kind=', kind);
+    // console.log('broadcast newProducer: kind=', kind);
     socket.broadcast.emit('newProducer', {
       kind: kind
     });
@@ -160,7 +169,7 @@ io.on('connection', function (socket) {
 
   // --- consumer ----
   socket.on('createConsumerTransport', async (data, callback) => {
-    console.log('createConsumerTransport');
+    // console.log('createConsumerTransport');
     const {
       transport,
       params
@@ -168,7 +177,7 @@ io.on('connection', function (socket) {
     addConsumerTrasport(getId(socket), transport);
     transport.observer.on('close', () => {
       const id = getId(socket);
-      console.log('consumerTransport closed');
+      // console.log('consumerTransport closed');
       const consumer = getAudioConsumer(getId(socket));
       if (consumer) {
         consumer.close();
@@ -180,10 +189,10 @@ io.on('connection', function (socket) {
   });
 
   socket.on('connectConsumerTransport', async (data, callback) => {
-    console.log('connectConsumerTransport');
+    // console.log('connectConsumerTransport');
     let transport = getConsumerTrasnport(getId(socket));
     if (!transport) {
-      console.error('transport not exist for id=' + getId(socket));
+      // console.error('transport not exist for id=' + getId(socket));
       sendResponse({}, callback);
       return;
     }
@@ -196,7 +205,7 @@ io.on('connection', function (socket) {
   socket.on('consume', async (data, callback) => {
     const rtpCapabilities = JSON.parse(data.rtpCapabilities);
     const kind = 'audio';
-    console.log('consume: kind=' + kind);
+    // console.log('consume: kind=' + kind);
     if (audioProducer) {
       let transport = getConsumerTrasnport(getId(socket));
       if (!transport) {
@@ -213,7 +222,7 @@ io.on('connection', function (socket) {
         console.log('consumer closed');
       })
       consumer.on('producerclose', () => {
-        console.log('consumer: on.producerclose');
+        // console.log('consumer: on.producerclose');
         consumer.close();
         removeAudioConsumer(id);
 
@@ -226,10 +235,10 @@ io.on('connection', function (socket) {
         });
       });
 
-      console.log('consumer ready');
+      // console.log('consumer ready');
       sendResponse(params, callback);
     } else {
-      console.log('consume, but audio producer not ready');
+      // console.log('consume, but audio producer not ready');
       const params = {
         producerId: null,
         id: null,
@@ -287,7 +296,7 @@ function cleanUpPeer(socket) {
   }
 
   if (producerSocketId === id) {
-    console.log('cleanup producer');
+    // console.log('cleanup producer');
     if (audioProducer) {
       audioProducer.close();
       audioProducer = null;
@@ -377,12 +386,12 @@ function getConsumerTrasnport(id) {
 
 function addConsumerTrasport(id, transport) {
   transports[id] = transport;
-  console.log('consumerTransports count=' + Object.keys(transports).length);
+  // console.log('consumerTransports count=' + Object.keys(transports).length);
 }
 
 function removeConsumerTransport(id) {
   delete transports[id];
-  console.log('consumerTransports count=' + Object.keys(transports).length);
+  // console.log('consumerTransports count=' + Object.keys(transports).length);
 }
 
 function getAudioConsumer(id) {
@@ -391,17 +400,17 @@ function getAudioConsumer(id) {
 
 function addAudioConsumer(id, consumer) {
   audioConsumers[id] = consumer;
-  console.log('audioConsumers count=' + Object.keys(audioConsumers).length);
+  // console.log('audioConsumers count=' + Object.keys(audioConsumers).length);
 }
 
 function removeAudioConsumer(id) {
   delete audioConsumers[id];
-  console.log('audioConsumers count=' + Object.keys(audioConsumers).length);
+  // console.log('audioConsumers count=' + Object.keys(audioConsumers).length);
 }
 
 async function createTransport() {
   const transport = await router.createWebRtcTransport(mediasoupOptions.webRtcTransport);
-  console.log('create transport id=' + transport.id);
+  // console.log('create transport id=' + transport.id);
 
   return {
     transport: transport,
