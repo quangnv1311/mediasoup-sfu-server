@@ -22,7 +22,7 @@ let sslOptions = {
   cert: ''
 };
 
-if(isFileExist(serverOptions.httpsKeyFile) && isFileExist(serverOptions.httpsCertFile)) {
+if (isFileExist(serverOptions.httpsKeyFile) && isFileExist(serverOptions.httpsCertFile)) {
   sslOptions.key = fs.readFileSync(serverOptions.httpsKeyFile).toString();
   sslOptions.cert = fs.readFileSync(serverOptions.httpsCertFile).toString();
 } else {
@@ -32,15 +32,13 @@ if(isFileExist(serverOptions.httpsKeyFile) && isFileExist(serverOptions.httpsCer
 
 const https = require("https");
 const express = require('express');
-const axios  = require('axios').default;
+const axios = require('axios').default;
 
 const app = express();
 const webPort = serverOptions.listenPort;
 app.use(express.static('public'));
 
 let webServer = null;
-let devices = [];
-let consumerSocketIds = [];
 
 webServer = https.createServer(sslOptions, app).listen(webPort, function () {
   console.log('Media server start on https://' + serverOptions.hostName + ':' + webServer.address().port + '/');
@@ -65,16 +63,16 @@ console.log('socket.io server start. port=' + webServer.address().port);
 
 io.use((socket, next) => {
   const type = socket.handshake.query.type;
-  if(type === 'device') {
-    const device_id = socket.handshake.query.device_id;
-    axios.post(`${config.dsServer}/api/player/ping`).then(res => {
-      next();
-      devices.push({id: device_id, socketId: getId(socket)});
-      console.log('Devices ==>', devices);
-    })
-    .catch(err => {
-      next('Authentication error: ' + err);
-    });
+  if (type === 'device') {
+    const token = socket.handshake.query.token;
+    axios.post(`${config.dsServer}/api/player/ping`, {
+        token: token
+      }).then(res => {
+        next();
+      })
+      .catch(err => {
+        next('Authentication error: ' + err);
+      });
   } else if (type === 'broadcast') {
     next();
     console.log('Admin connected');
@@ -139,15 +137,9 @@ io.on('connection', function (socket) {
   socket.on('produce', async (data, callback) => {
     const {
       kind,
-      rtpParameters,
-      devices
+      rtpParameters
     } = data;
     console.log('produce: kind=', kind);
-    devices.forEach(deviceId => {
-      if(getDeviceSocketId(deviceId)) {
-        consumerSocketIds.push(getDeviceSocketId(deviceId));
-      }
-    });
     audioProducer = await producerTransport.produce({
       kind,
       rtpParameters
@@ -161,10 +153,8 @@ io.on('connection', function (socket) {
     }, callback);
 
     console.log('broadcast newProducer: kind=', kind);
-    consumerSocketIds.forEach(consumerSocketId => {
-      socket.to(consumerSocketId).emit('newProducer', {
-        kind: kind
-      });
+    socket.broadcast.emit('newProducer', {
+      kind: kind
     });
   });
 
@@ -228,12 +218,11 @@ io.on('connection', function (socket) {
         removeAudioConsumer(id);
 
         // -- notify to client ---
-        consumerSocketIds.forEach(consumerSocketId => {
-          socket.to(consumerSocketId).emit('producerClosed', {
-            localId: id,
-            remoteId: producerSocketId,
-            kind: 'audio'
-          });
+
+        socket.broadcast.emit('producerClosed', {
+          localId: id,
+          remoteId: producerSocketId,
+          kind: 'audio'
         });
       });
 
@@ -254,14 +243,18 @@ io.on('connection', function (socket) {
   socket.on('pause', async (data, callback) => {
     audioProducer.pause();
     audioProducer.on('producerpause', () => {
-      sendResponse({paused: true}, callback);
+      sendResponse({
+        paused: true
+      }, callback);
     });
   });
 
   socket.on('resume', async (data, callback) => {
     audioProducer.resume();
     audioProducer.on('producerresume', () => {
-      sendResponse({resumed: true}, callback);
+      sendResponse({
+        resumed: true
+      }, callback);
     });
   });
 
@@ -275,14 +268,6 @@ io.on('connection', function (socket) {
     callback(error.toString(), null);
   }
 });
-
-function getDeviceSocketId(deviceId) {
-  const device = devices.find(d => d.id === deviceId);
-  if(device) {
-    return device.socketId;
-  }
-  return null;
-}
 
 function getId(socket) {
   return socket.id;
@@ -337,12 +322,11 @@ const mediasoupOptions = {
   // Router settings
   router: {
     mediaCodecs: [{
-        kind: 'audio',
-        mimeType: 'audio/opus',
-        clockRate: 48000,
-        channels: 2
-      }
-    ]
+      kind: 'audio',
+      mimeType: 'audio/opus',
+      clockRate: 48000,
+      channels: 2
+    }]
   },
   // WebRtcTransport settings
   webRtcTransport: {
@@ -360,7 +344,7 @@ const mediasoupOptions = {
 };
 
 let worker = null;
-let worker2 =  null; //Use multi cpu
+let worker2 = null; //Use multi cpu
 let router = null;
 let router2 = null; //Use multi cpu
 
