@@ -39,6 +39,7 @@ const webPort = serverOptions.listenPort;
 app.use(express.static('public'));
 
 let webServer = null;
+let loadBalanceCount = 0;
 
 webServer = https.createServer(sslOptions, app).listen(webPort, function () {
   console.log('Media server start on https://' + serverOptions.hostName + ':' + webServer.address().port + '/');
@@ -88,11 +89,12 @@ io.use((socket, next) => {
 });
 
 io.on('connection', function (socket) {
-  // console.log('client connected. socket id=' + getId(socket) + '  , total clients=' + getClientCount());
-
+  console.log('client connected. socket id=' + getId(socket) + '  , total clients=' + getClientCount());
+  loadBalanceCount = getClientCount();
   socket.on('disconnect', function () {
     // close user connection
-    // console.log('client disconnected. socket id=' + getId(socket) + '  , total clients=' + getClientCount());
+    console.log('client disconnected. socket id=' + getId(socket) + '  , total clients=' + getClientCount());
+    loadBalanceCount = getClientCount();
     cleanUpPeer(socket);
   });
   socket.on('error', function (err) {
@@ -154,6 +156,17 @@ io.on('connection', function (socket) {
       rtpParameters
     });
 
+    //Load balance
+    if(loadBalance() !== 1) {
+      if(loadBalance() === 2) {
+        await router.pipeToRouter({ producerId: audioProducer.id, router: router2 });
+      } else if(loadBalance() === 3) {
+        await router.pipeToRouter({ producerId: audioProducer.id, router: router3 });
+      } else {
+        await router.pipeToRouter({ producerId: audioProducer.id, router: router4 });
+      }
+    }
+
     audioProducer.observer.on('close', () => {
       console.log('audioProducer closed');
     })
@@ -161,7 +174,7 @@ io.on('connection', function (socket) {
       id: audioProducer.id
     }, callback);
 
-    // console.log('broadcast newProducer: kind=', kind);
+    console.log('broadcast newProducer: kind=', kind);
     socket.broadcast.emit('newProducer', {
       kind: kind
     });
@@ -169,7 +182,7 @@ io.on('connection', function (socket) {
 
   // --- consumer ----
   socket.on('createConsumerTransport', async (data, callback) => {
-    // console.log('createConsumerTransport');
+    console.log('createConsumerTransport');
     const {
       transport,
       params
@@ -177,7 +190,7 @@ io.on('connection', function (socket) {
     addConsumerTrasport(getId(socket), transport);
     transport.observer.on('close', () => {
       const id = getId(socket);
-      // console.log('consumerTransport closed');
+      console.log('consumerTransport closed');
       const consumer = getAudioConsumer(getId(socket));
       if (consumer) {
         consumer.close();
@@ -189,10 +202,10 @@ io.on('connection', function (socket) {
   });
 
   socket.on('connectConsumerTransport', async (data, callback) => {
-    // console.log('connectConsumerTransport');
+    console.log('connectConsumerTransport');
     let transport = getConsumerTrasnport(getId(socket));
     if (!transport) {
-      // console.error('transport not exist for id=' + getId(socket));
+      console.error('transport not exist for id=' + getId(socket));
       sendResponse({}, callback);
       return;
     }
@@ -205,7 +218,7 @@ io.on('connection', function (socket) {
   socket.on('consume', async (data, callback) => {
     const rtpCapabilities = JSON.parse(data.rtpCapabilities);
     const kind = 'audio';
-    // console.log('consume: kind=' + kind);
+    console.log('consume: kind=' + kind);
     if (audioProducer) {
       let transport = getConsumerTrasnport(getId(socket));
       if (!transport) {
@@ -220,9 +233,9 @@ io.on('connection', function (socket) {
       addAudioConsumer(id, consumer);
       consumer.observer.on('close', () => {
         console.log('consumer closed');
-      })
+      });
       consumer.on('producerclose', () => {
-        // console.log('consumer: on.producerclose');
+        console.log('consumer: on.producerclose');
         consumer.close();
         removeAudioConsumer(id);
 
@@ -234,11 +247,10 @@ io.on('connection', function (socket) {
           kind: 'audio'
         });
       });
-
-      // console.log('consumer ready');
+      console.log('consumer ready');
       sendResponse(params, callback);
     } else {
-      // console.log('consume, but audio producer not ready');
+      console.log('consume, but audio producer not ready');
       const params = {
         producerId: null,
         id: null,
@@ -296,7 +308,7 @@ function cleanUpPeer(socket) {
   }
 
   if (producerSocketId === id) {
-    // console.log('cleanup producer');
+    console.log('cleanup producer');
     if (audioProducer) {
       audioProducer.close();
       audioProducer = null;
@@ -354,9 +366,12 @@ const mediasoupOptions = {
 
 let worker = null;
 let worker2 = null; //Use multi cpu
+let worker3 = null;
+let worker4 = null;
 let router = null;
 let router2 = null; //Use multi cpu
-
+let router3 = null;
+let router4 = null;
 let producerTransport = null;
 let audioProducer = null;
 let producerSocketId = null;
@@ -365,6 +380,8 @@ async function startWorker() {
   const mediaCodecs = mediasoupOptions.router.mediaCodecs;
   worker = await mediasoup.createWorker(mediasoupOptions.worker);
   worker2 = await mediasoup.createWorker(mediasoupOptions.worker);
+  worker3 = await mediasoup.createWorker(mediasoupOptions.worker);
+  worker4 = await mediasoup.createWorker(mediasoupOptions.worker);
 
   router = await worker.createRouter({
     mediaCodecs
@@ -372,7 +389,13 @@ async function startWorker() {
   router2 = await worker2.createRouter({
     mediaCodecs
   });
-  console.log('Mediasoup 2 workers started')
+  router3 = await worker3.createRouter({
+    mediaCodecs
+  });
+  router4 = await worker4.createRouter({
+    mediaCodecs
+  });
+  console.log('Mediasoup 4 workers started');
 }
 
 startWorker();
@@ -386,12 +409,12 @@ function getConsumerTrasnport(id) {
 
 function addConsumerTrasport(id, transport) {
   transports[id] = transport;
-  // console.log('consumerTransports count=' + Object.keys(transports).length);
+  console.log('consumerTransports count=' + Object.keys(transports).length);
 }
 
 function removeConsumerTransport(id) {
   delete transports[id];
-  // console.log('consumerTransports count=' + Object.keys(transports).length);
+  console.log('consumerTransports count=' + Object.keys(transports).length);
 }
 
 function getAudioConsumer(id) {
@@ -400,17 +423,27 @@ function getAudioConsumer(id) {
 
 function addAudioConsumer(id, consumer) {
   audioConsumers[id] = consumer;
-  // console.log('audioConsumers count=' + Object.keys(audioConsumers).length);
+  console.log('audioConsumers count=' + Object.keys(audioConsumers).length);
 }
 
 function removeAudioConsumer(id) {
   delete audioConsumers[id];
-  // console.log('audioConsumers count=' + Object.keys(audioConsumers).length);
+  console.log('audioConsumers count=' + Object.keys(audioConsumers).length);
 }
 
 async function createTransport() {
-  const transport = await router.createWebRtcTransport(mediasoupOptions.webRtcTransport);
-  // console.log('create transport id=' + transport.id);
+  let transport = null;
+  if(loadBalance() === 1) {
+    transport = await router.createWebRtcTransport(mediasoupOptions.webRtcTransport);
+  } else if(loadBalance() === 2) {
+    transport = await router2.createWebRtcTransport(mediasoupOptions.webRtcTransport);
+  } else if(loadBalance() === 3) {
+    transport = await router3.createWebRtcTransport(mediasoupOptions.webRtcTransport);
+  } else {
+    transport = await router4.createWebRtcTransport(mediasoupOptions.webRtcTransport);
+  }
+
+  console.log('create transport id=' + transport.id);
 
   return {
     transport: transport,
@@ -436,7 +469,7 @@ async function createConsumer(transport, producer, rtpCapabilities) {
   consumer = await transport.consume({ // OK
     producerId: producer.id,
     rtpCapabilities,
-    paused: false, // Audio is not nessecary paused
+    paused: false,
   }).catch(err => {
     console.error('consume failed', err);
     return;
@@ -453,4 +486,19 @@ async function createConsumer(transport, producer, rtpCapabilities) {
       producerPaused: consumer.producerPaused
     }
   };
+}
+
+function loadBalance() {
+  if(loadBalanceCount < 100) {
+    return 1;
+  }
+  if(loadBalanceCount > 100) {
+    return 2;
+  }
+  if(loadBalanceCount > 200) {
+    return 3;
+  }
+  if(loadBalanceCount > 300) {
+    return 4;
+  }
 }
