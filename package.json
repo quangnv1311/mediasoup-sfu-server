@@ -1,16 +1,11 @@
 {
-  "name": "mediasoup_v3_example",
+  "name": "audio-mb-server",
   "version": "0.8.0",
-  "description": "WebRTC SFU mediaosoup v3 example",
-  "main": "mediasoup_v3_example.js",
+  "description": "Audio streaming server using Mediasoup SFU server",
+  "main": "mediasoup_v3_broadcast.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "build-client": "node_modules/browserify/bin/cmd.js node_modules/mediasoup-client/lib/index.js -s MediasoupClient -o public/js/mediasoup-client.js",
     "start": "node mediasoup_v3_broadcast.js"
   },
-  "keywords": [
-    "webrtc"
-  ],
   "author": "quangnv",
   "license": "MIT",
   "dependencies": {
@@ -18,8 +13,9 @@
     "browserify": "^16.3.0",
     "dotenv": "^8.2.0",
     "express": "^4.17.1",
+    "form-data": "^3.0.0",
     "mediasoup": "^3.6.2",
-    "mediasoup-client": "^3.1.6",
+    "shelljs": "^0.8.4",
     "socket.io": "^2.2.0"
   },
   "engines": {

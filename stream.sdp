@@ -1,0 +1,8 @@
+v=0 
+t=0 0
+o=- 0 0 IN IP4 127.0.0.1
+s=FFmpeg
+m=audio 27421 RTP/AVP 100 
+c=IN IP4 127.0.0.1
+a=recvonly
+a=rtpmap:100 opus/48000/2
