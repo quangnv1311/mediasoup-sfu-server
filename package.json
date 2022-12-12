@@ -12,7 +12,7 @@
     "axios": "^0.19.2",
     "browserify": "^16.3.0",
     "dotenv": "^8.2.0",
-    "express": "^4.17.1",
+    "express": "^4.17.3",
     "form-data": "^3.0.0",
     "mediasoup": "^3.6.2",
     "shelljs": "^0.8.4",
